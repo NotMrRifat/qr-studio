@@ -11,12 +11,15 @@ export default async function handler(req, res) {
     return;
   }
 
-  if (!WEBSITE_URL) {
-    res.status(500).json({ error: "WEBSITE_URL environment variable is not defined (e.g. https://eliteqrgenerator.vercel.app)" });
+  const queryUrl = req.query.url;
+  const baseUrl = queryUrl || WEBSITE_URL;
+
+  if (!baseUrl) {
+    res.status(500).json({ error: "WEBSITE_URL environment variable is not defined, and no ?url= parameter was provided" });
     return;
   }
 
-  const webhookUrl = `${WEBSITE_URL}/api/telegram`;
+  const webhookUrl = `${baseUrl.replace(/\/$/, "")}/api/telegram`;
   const registerUrl = `https://api.telegram.org/bot${BOT_TOKEN}/setWebhook?url=${encodeURIComponent(webhookUrl)}`;
 
   try {

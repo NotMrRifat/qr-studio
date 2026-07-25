@@ -3,26 +3,40 @@ import { userStore } from "../lib/userStore.js";
 import { sendMessage, sendPhoto, answerCallbackQuery } from "../lib/telegram.js";
 import { generateQRValue } from "../lib/qrGenerator.js";
 
-const ADMIN_ID = process.env.ADMIN_ID;
+// Configured values
+const ADMIN_ID = process.env.ADMIN_ID ? String(process.env.ADMIN_ID).trim() : null;
 const WEBSITE_URL = process.env.WEBSITE_URL || "https://eliteqrgenerator.vercel.app";
 
 export default async function handler(req, res) {
-  // Telegram webhooks send POST requests
+  // 1. HTTP Method validation
   if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
     res.status(405).json({ error: "Method not allowed. Only POST is supported." });
     return;
   }
 
-  // Always respond immediately to Telegram to prevent retry floods
-  res.status(200).send("OK");
+  // 2. Start-up Validation of token env variables
+  if (!process.env.BOT_TOKEN) {
+    console.error("CRITICAL CONFIGURATION ERROR: BOT_TOKEN is missing in process.env");
+    res.status(500).json({ error: "Server Configuration Error: BOT_TOKEN is missing" });
+    return;
+  }
+
+  const update = req.body;
+  
+  // 3. Log incoming webhook payload
+  console.log("Incoming Telegram Update:", JSON.stringify(update, null, 2));
+
+  if (!update) {
+    res.status(400).json({ error: "Invalid payload: body is empty" });
+    return;
+  }
+
+  let chatId, userId, username, text, callbackQueryId, callbackData;
 
   try {
-    const update = req.body;
-    if (!update) return;
 
-    let chatId, userId, username, text, callbackQueryId, callbackData;
-
-    // 1. Handle Callback Queries from Inline Buttons
+    // A. Parse Callback Queries
     if (update.callback_query) {
       const cb = update.callback_query;
       callbackQueryId = cb.id;
@@ -30,27 +44,37 @@ export default async function handler(req, res) {
       chatId = cb.message.chat.id;
       userId = cb.from.id;
       username = cb.from.username;
+      
+      console.log(`Parsed Callback Query: ID=${callbackQueryId}, Data=${callbackData}, User=${username || userId}`);
     } 
-    // 2. Handle Text Messages & Commands
+    // B. Parse Regular Text Messages / Commands
     else if (update.message) {
       const msg = update.message;
       chatId = msg.chat.id;
       userId = msg.from.id;
       username = msg.from.username;
       text = msg.text ? msg.text.trim() : null;
+
+      console.log(`Parsed Message: User=${username || userId}, Text="${text}"`);
     }
 
-    if (!userId) return;
+    // Skip if there's no actionable user ID
+    if (!userId) {
+      console.warn("Skipping update: No user ID resolved in payload");
+      res.status(200).send("OK");
+      return;
+    }
 
-    // Register/Update user in storage
+    // C. Register user in swappable local store
     await userStore.addUser(userId, username);
 
-    // Route Callback Queries
+    // D. Route Callback Queries
     if (callbackData) {
       await answerCallbackQuery(callbackQueryId);
 
       if (callbackData.startsWith("flow:")) {
         const flowType = callbackData.substring(5);
+        console.log(`Initiating flow: ${flowType} for user ${userId}`);
         
         if (flowType === "wifi") {
           await userStore.setUserState(userId, { step: "wifi_ssid" });
@@ -73,16 +97,21 @@ export default async function handler(req, res) {
       else if (callbackData === "menu_website") {
         await sendMessage(chatId, `🌐 Visit our premium web application here:\n${WEBSITE_URL}`);
       }
+
+      // Finish webhook successfully
+      res.status(200).send("OK");
       return;
     }
 
-    // Route Text Messages / Commands
+    // E. Route Commands & Text Inputs
     if (text) {
-      // Check Commands
+      // 1. Process Slash Commands
       if (text.startsWith("/")) {
-        await userStore.clearUserState(userId); // Clear active session on new command
+        await userStore.clearUserState(userId); // Reset session state
         
         const command = text.split(" ")[0].toLowerCase();
+        console.log(`Routing command: ${command} from user ${userId}`);
+
         switch (command) {
           case "/start":
             await sendStartMenu(chatId, username);
@@ -114,22 +143,28 @@ export default async function handler(req, res) {
           default:
             await sendMessage(chatId, "❌ Unknown command. Type /help to see available actions.");
         }
+
+        res.status(200).send("OK");
         return;
       }
 
-      // Check Active User States
+      // 2. Process Input States (Conversational Flow)
       const state = await userStore.getUserState(userId);
       if (state) {
-        // Handle Broadcast State
+        console.log(`Processing state: step=${state.step} for user ${userId}`);
+
+        // Broadcast workflow
         if (state.step === "admin_broadcast" && String(userId) === String(ADMIN_ID)) {
           await executeBroadcast(chatId, text);
+          res.status(200).send("OK");
           return;
         }
 
-        // Handle WiFi Flow Steps
+        // WiFi wizard
         if (state.step === "wifi_ssid") {
           await userStore.setUserState(userId, { step: "wifi_password", ssid: text });
           await sendMessage(chatId, `🔑 SSID set to <b>"${text}"</b>.\n\nNow, send the network <b>Password</b> (or send <i>none</i> for open networks):`);
+          res.status(200).send("OK");
           return;
         } 
         
@@ -142,25 +177,41 @@ export default async function handler(req, res) {
           const qrVal = generateQRValue("wifi", { ssid, password, encryption });
           await generateAndSendQR(chatId, qrVal, `📶 WiFi Code\nSSID: <b>${ssid}</b>`);
           await userStore.clearUserState(userId);
+          
+          res.status(200).send("OK");
           return;
         }
 
-        // Handle other QR Flows
+        // Regular wizard values
         if (state.step.startsWith("waiting_for_")) {
-          const type = state.step.substring(12); // extract type
+          const type = state.step.substring(12);
           await sendMessage(chatId, "⏳ Processing and generating QR Code...");
           const qrVal = generateQRValue(type, text);
           await generateAndSendQR(chatId, qrVal, `✅ QR Code generated from input:\n<code>${text}</code>`);
           await userStore.clearUserState(userId);
+          
+          res.status(200).send("OK");
           return;
         }
       }
 
-      // Default fallback (no state, no command)
+      // 3. Fallback: No state and no command, send default menu
+      console.log(`Fallback: Sending default menu to user ${userId}`);
       await sendStartMenu(chatId, username);
     }
+
+    res.status(200).send("OK");
   } catch (err) {
-    console.error("Critical webhook error:", err);
+    // 4. Robust error handling - Bot must never silently fail, but always return HTTP 200 to Telegram
+    console.error("WEBHOOK ERROR DURING EXECUTION:", err);
+    
+    try {
+      await sendMessage(chatId, "❌ An internal server error occurred while processing your QR code. Please try again later.");
+    } catch (sendErr) {
+      console.error("Failed to notify user about webhook error:", sendErr);
+    }
+    
+    res.status(200).send("OK");
   }
 }
 
@@ -417,7 +468,6 @@ async function executeBroadcast(chatId, broadcastText) {
   let failedCount = 0;
 
   for (const user of users) {
-    // Avoid broadcasting back to admin in the loop if needed, but it's okay to send
     try {
       const res = await sendMessage(user.telegram_user_id, broadcastText);
       if (res && res.ok) {
