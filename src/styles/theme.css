@@ -1,0 +1,38 @@
+:root {
+  /* Light Mode (StyMetics premium luxury palette) */
+  --primary: #630D16;
+  --secondary: #D7C4B1;
+  --background: #EDE4DA;
+  --dark: #1A0D0F;
+  --accent: #8B1E2D;
+  
+  --card-bg: #FFFFFF;
+  --card-border: rgba(99, 13, 22, 0.08);
+  --text-primary: #1A0D0F;
+  --text-secondary: #635052;
+  --border-color: rgba(26, 13, 15, 0.1);
+  --shadow: 0 10px 30px -10px rgba(99, 13, 22, 0.12);
+  --shadow-hover: 0 20px 40px -15px rgba(99, 13, 22, 0.2);
+  
+  --radius-lg: 24px;
+  --radius-md: 16px;
+  --radius-sm: 10px;
+  --transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body.dark {
+  /* Dark Mode */
+  --primary: #D7C4B1; /* Warm gold text/accent highlight */
+  --secondary: #630D16; 
+  --background: #120809; /* Premium near-black burgundy */
+  --dark: #EDE4DA;
+  --accent: #B02737;
+  
+  --card-bg: #1A0D0F; /* Rich dark wine card */
+  --card-border: rgba(215, 196, 177, 0.12);
+  --text-primary: #EDE4DA;
+  --text-secondary: #BFAEA0;
+  --border-color: rgba(215, 196, 177, 0.15);
+  --shadow: 0 10px 40px -15px rgba(0, 0, 0, 0.6);
+  --shadow-hover: 0 20px 50px -10px rgba(0, 0, 0, 0.8);
+}

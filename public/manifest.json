@@ -1,0 +1,29 @@
+{
+  "name": "Elite QR Generator",
+  "short_name": "Elite QR",
+  "description": "Create premium, stylish, and customizable QR codes instantly.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#EDE4DA",
+  "theme_color": "#630D16",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}
