@@ -1,8 +1,8 @@
-const CACHE_NAME = "qr-studio-v1";
+const CACHE_NAME = "elite-qr-v1";
 const ASSETS = [
   "/",
   "/index.html",
-  "/favicon.svg",
+  "/Logo.png",
   "/manifest.json",
   "/src/main.jsx",
   "/src/App.jsx",
@@ -36,7 +36,6 @@ self.addEventListener("activate", (e) => {
 
 // Fetch Event
 self.addEventListener("fetch", (e) => {
-  // Only handle GET requests and local requests
   if (e.request.method !== "GET" || !e.request.url.startsWith(self.location.origin)) {
     return;
   }
@@ -57,7 +56,6 @@ self.addEventListener("fetch", (e) => {
         return networkResponse;
       });
     }).catch(() => {
-      // Offline fallback
       return caches.match("/");
     })
   );

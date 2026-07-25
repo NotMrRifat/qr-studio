@@ -57,21 +57,12 @@ export default function Header() {
         </div>
         <div className="container nav">
           <a href="#" className="logo-container">
-            <svg
+            <img
+              src="/Logo.png"
+              alt="Elite QR Logo"
               className="logo-icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <rect x="7" y="7" width="3" height="3" />
-              <rect x="14" y="7" width="3" height="3" />
-              <rect x="7" y="14" width="3" height="3" />
-              <rect x="14" y="14" width="3" height="3" />
-            </svg>
+              style={{ width: "32px", height: "32px", objectFit: "contain", borderRadius: "6px" }}
+            />
             <span>Elite QR Generator</span>
           </a>
 

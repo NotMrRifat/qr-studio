@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import QRCodeStyling from "qr-code-styling";
+import jsQR from "jsqr";
 import { 
   FiEdit3, 
   FiSliders, 
@@ -11,15 +12,17 @@ import {
   FiUpload, 
   FiTrash2, 
   FiBookmark, 
-  FiInfo 
+  FiInfo,
+  FiCheckCircle,
+  FiXCircle
 } from "react-icons/fi";
 import { FaWhatsapp } from "react-icons/fa";
+import { motion, AnimatePresence } from "framer-motion";
 
 // Custom UI Components
 import Card from "../common/Card";
 import Button from "../common/Button";
 import QRHistory from "./QRHistory";
-import QRFavorites from "./QRFavorites";
 
 // Utilities & Data
 import { generateQRValue } from "../../utils/qrHelpers";
@@ -29,8 +32,8 @@ import {
   CORNER_SQUARE_STYLES,
   CORNER_DOT_STYLES,
   RESOLUTIONS,
-  DEFAULT_PRESETS,
-  DEFAULT_QR_STATE
+  DEFAULT_QR_STATE,
+  QR_TEMPLATES
 } from "../../utils/qrConfig";
 
 export default function QRGenerator() {
@@ -41,11 +44,42 @@ export default function QRGenerator() {
   const [qrState, setQrState] = useState(DEFAULT_QR_STATE);
   const [activeTab, setActiveTab] = useState("content");
   const [selectedResolution, setSelectedResolution] = useState(1024);
+  const [isLoading, setIsLoading] = useState(false);
 
   // WiFi sub-states
   const [wifiSsid, setWifiSsid] = useState("");
   const [wifiPassword, setWifiPassword] = useState("");
   const [wifiEncryption, setWifiEncryption] = useState("WPA");
+
+  // QR Validation Scan Test State
+  const [validationResult, setValidationResult] = useState(null); // null, 'success', 'failed'
+
+  // Toast Notification State
+  const [toasts, setToasts] = useState([]);
+
+  // Local Analytics State
+  const [analytics, setAnalytics] = useState(() => {
+    try {
+      const stats = JSON.parse(localStorage.getItem("qr_analytics_stats") || "[]");
+      const savedCount = JSON.parse(localStorage.getItem("qr_saved_designs") || "[]").length;
+      
+      const now = Date.now();
+      const oneDay = 24 * 60 * 60 * 1000;
+      const oneWeek = 7 * oneDay;
+      
+      const todayCount = stats.filter(t => now - t < oneDay).length;
+      const weekCount = stats.filter(t => now - t < oneWeek).length;
+      
+      return {
+        total: stats.length,
+        today: todayCount,
+        thisWeek: weekCount,
+        savedCount: savedCount
+      };
+    } catch {
+      return { total: 0, today: 0, thisWeek: 0, savedCount: 0 };
+    }
+  });
 
   // History & Presets Local Storage States
   const [historyItems, setHistoryItems] = useState(() => {
@@ -53,10 +87,55 @@ export default function QRGenerator() {
     return cached ? JSON.parse(cached) : [];
   });
 
-  const [favoritePresets, setFavoritePresets] = useState(() => {
-    const cached = localStorage.getItem("qr_favorites");
+  const [savedDesigns, setSavedDesigns] = useState(() => {
+    const cached = localStorage.getItem("qr_saved_designs");
     return cached ? JSON.parse(cached) : [];
   });
+
+  // Stable callbacks to avoid purity and render lifecycle check issues
+  const showToast = useCallback((message, type = "success") => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3000);
+  }, []);
+
+  // Update local analytics state from storage stats
+  const updateAnalytics = useCallback(() => {
+    try {
+      const stats = JSON.parse(localStorage.getItem("qr_analytics_stats") || "[]");
+      const savedCount = JSON.parse(localStorage.getItem("qr_saved_designs") || "[]").length;
+      
+      const now = Date.now();
+      const oneDay = 24 * 60 * 60 * 1000;
+      const oneWeek = 7 * oneDay;
+      
+      const todayCount = stats.filter(t => now - t < oneDay).length;
+      const weekCount = stats.filter(t => now - t < oneWeek).length;
+      
+      setAnalytics({
+        total: stats.length,
+        today: todayCount,
+        thisWeek: weekCount,
+        savedCount: savedCount
+      });
+    } catch (e) {
+      console.warn("Failed to load analytics stats:", e);
+    }
+  }, []);
+
+  // Record a new QR generation in analytics stats
+  const recordGeneration = useCallback(() => {
+    try {
+      const stats = JSON.parse(localStorage.getItem("qr_analytics_stats") || "[]");
+      stats.push(Date.now());
+      localStorage.setItem("qr_analytics_stats", JSON.stringify(stats));
+      updateAnalytics();
+    } catch (e) {
+      console.warn("Failed to save generation analytics:", e);
+    }
+  }, [updateAnalytics]);
 
   // Dynamically calculate the final raw text to write in the QR code
   const generatedValue = useMemo(() => {
@@ -71,7 +150,7 @@ export default function QRGenerator() {
     qrInstance.current = new QRCodeStyling({
       width: 280,
       height: 280,
-      data: generatedValue || "https://stymetics.com",
+      data: generatedValue || "https://eliteqrgenerator.vercel.app",
       margin: qrState.margin,
       image: qrState.logo,
       qrOptions: {
@@ -125,39 +204,48 @@ export default function QRGenerator() {
   // Update QR options dynamically when any custom styling state changes
   useEffect(() => {
     if (!qrInstance.current) return;
+    
+    // Clear validation status when options change
+    setValidationResult(null);
+    setIsLoading(true);
 
-    qrInstance.current.update({
-      data: generatedValue || " ",
-      margin: qrState.margin,
-      image: qrState.logo,
-      dotsOptions: {
-        type: qrState.dotType,
-        color: qrState.dotColor,
-        gradient: qrState.colorType === "gradient" ? {
-          type: qrState.gradientType,
-          rotation: qrState.gradientRotation * Math.PI / 180,
-          colorStops: [
-            { offset: 0, color: qrState.dotColor },
-            { offset: 1, color: qrState.gradientColor }
-          ]
-        } : null
-      },
-      backgroundOptions: {
-        color: qrState.transparentBg ? "rgba(0,0,0,0)" : qrState.bgColor,
-      },
-      cornersSquareOptions: {
-        type: qrState.cornerSquareType,
-        color: qrState.dotColor,
-      },
-      cornersDotOptions: {
-        type: qrState.cornerDotType,
-        color: qrState.dotColor,
-      },
-      imageOptions: {
-        margin: qrState.logoMargin,
-        imageSize: qrState.logoSize,
-      }
-    });
+    const timer = setTimeout(() => {
+      qrInstance.current.update({
+        data: generatedValue || " ",
+        margin: qrState.margin,
+        image: qrState.logo,
+        dotsOptions: {
+          type: qrState.dotType,
+          color: qrState.dotColor,
+          gradient: qrState.colorType === "gradient" ? {
+            type: qrState.gradientType,
+            rotation: qrState.gradientRotation * Math.PI / 180,
+            colorStops: [
+              { offset: 0, color: qrState.dotColor },
+              { offset: 1, color: qrState.gradientColor }
+            ]
+          } : null
+        },
+        backgroundOptions: {
+          color: qrState.transparentBg ? "rgba(0,0,0,0)" : qrState.bgColor,
+        },
+        cornersSquareOptions: {
+          type: qrState.cornerSquareType,
+          color: qrState.dotColor,
+        },
+        cornersDotOptions: {
+          type: qrState.cornerDotType,
+          color: qrState.dotColor,
+        },
+        imageOptions: {
+          margin: qrState.logoMargin,
+          imageSize: qrState.logoSize,
+        }
+      });
+      setIsLoading(false);
+    }, 150);
+
+    return () => clearTimeout(timer);
   }, [
     generatedValue,
     qrState.margin,
@@ -177,24 +265,25 @@ export default function QRGenerator() {
   ]);
 
   // Log new code to history (Triggered on Download, Copy or Share)
-  const saveToHistory = () => {
+  const saveToHistory = useCallback(() => {
     const newItem = {
-      id: Date.now().toString(),
+      id: Math.random().toString(36).substring(2, 9) + "-" + Date.now(),
       type: qrState.qrType,
       data: generatedValue,
       wifiSsid: wifiSsid,
       timestamp: Date.now(),
-      // Snapshot state details
       ...qrState
     };
     
-    const updated = [newItem, ...historyItems.slice(0, 19)]; // Limit to 20 recent
-    setHistoryItems(updated);
-    localStorage.setItem("qr_history", JSON.stringify(updated));
-  };
+    setHistoryItems(prev => {
+      const updated = [newItem, ...prev.slice(0, 19)];
+      localStorage.setItem("qr_history", JSON.stringify(updated));
+      return updated;
+    });
+    recordGeneration();
+  }, [generatedValue, qrState, wifiSsid, recordGeneration]);
 
-  const handleReuseHistory = (item) => {
-    // Populate form data back
+  const handleReuseHistory = useCallback((item) => {
     setQrState({
       qrType: item.qrType,
       rawData: item.rawData,
@@ -220,74 +309,164 @@ export default function QRGenerator() {
       setWifiEncryption(item.wifiEncryption || "WPA");
     }
     setActiveTab("content");
-  };
+    showToast("Loaded design from history");
+  }, [showToast]);
 
-  const handleDeleteHistory = (id) => {
-    const updated = historyItems.filter(item => item.id !== id);
-    setHistoryItems(updated);
-    localStorage.setItem("qr_history", JSON.stringify(updated));
-  };
+  const handleDeleteHistory = useCallback((id) => {
+    setHistoryItems(prev => {
+      const updated = prev.filter(item => item.id !== id);
+      localStorage.setItem("qr_history", JSON.stringify(updated));
+      return updated;
+    });
+    showToast("Deleted history record");
+  }, [showToast]);
 
-  // Preset Handlers
-  const handleApplyPreset = (preset) => {
+  // Apply QR templates presets
+  const handleApplyTemplate = useCallback((template) => {
     setQrState(prev => ({
       ...prev,
-      dotType: preset.dotType,
-      cornerSquareType: preset.cornerSquareType,
-      cornerDotType: preset.cornerDotType,
-      colorType: preset.gradientType !== "none" ? "gradient" : "single",
-      dotColor: preset.dotColor,
-      gradientType: preset.gradientType !== "none" ? preset.gradientType : "linear",
-      gradientColor: preset.gradientColor || "#D7C4B1",
-      bgColor: preset.bgColor,
-      transparentBg: preset.bgColor === "transparent" || preset.transparentBg,
-      margin: preset.margin || 10
+      dotType: template.dotType,
+      cornerSquareType: template.cornerSquareType,
+      cornerDotType: template.cornerDotType,
+      colorType: template.colorType,
+      dotColor: template.dotColor,
+      gradientType: template.gradientType || "linear",
+      gradientColor: template.gradientColor || "#D7C4B1",
+      gradientRotation: template.gradientRotation || 0,
+      bgColor: template.bgColor,
+      transparentBg: template.transparentBg,
     }));
-  };
+    showToast(`Template "${template.name}" applied!`);
+  }, [showToast]);
 
-  const handleSaveFavorite = (name) => {
-    const newPreset = {
-      id: Date.now().toString(),
+  // Saved Custom Presets Handlers
+  const handleSaveDesign = useCallback((name) => {
+    const newDesign = {
+      id: Math.random().toString(36).substring(2, 9) + "-" + Date.now(),
       name,
+      qrType: qrState.qrType,
+      rawData: qrState.rawData,
+      wifiSsid: wifiSsid,
+      wifiPassword: wifiPassword,
+      wifiEncryption: wifiEncryption,
       dotType: qrState.dotType,
       cornerSquareType: qrState.cornerSquareType,
       cornerDotType: qrState.cornerDotType,
-      gradientType: qrState.colorType === "gradient" ? qrState.gradientType : "none",
+      colorType: qrState.colorType,
       dotColor: qrState.dotColor,
+      gradientType: qrState.gradientType,
       gradientColor: qrState.gradientColor,
+      gradientRotation: qrState.gradientRotation,
       bgColor: qrState.transparentBg ? "transparent" : qrState.bgColor,
-      margin: qrState.margin
+      transparentBg: qrState.transparentBg,
+      margin: qrState.margin,
+      logo: qrState.logo,
+      logoSize: qrState.logoSize,
+      logoMargin: qrState.logoMargin,
+      timestamp: Date.now()
     };
 
-    const updated = [...favoritePresets, newPreset];
-    setFavoritePresets(updated);
-    localStorage.setItem("qr_favorites", JSON.stringify(updated));
-  };
+    setSavedDesigns(prev => {
+      const updated = [...prev, newDesign];
+      localStorage.setItem("qr_saved_designs", JSON.stringify(updated));
+      return updated;
+    });
+    setTimeout(() => {
+      updateAnalytics();
+    }, 50);
+    showToast(`Saved design "${name}" successfully!`);
+  }, [qrState, wifiSsid, wifiPassword, wifiEncryption, updateAnalytics, showToast]);
 
-  const handleDeleteFavorite = (id) => {
-    const updated = favoritePresets.filter(p => p.id !== id);
-    setFavoritePresets(updated);
-    localStorage.setItem("qr_favorites", JSON.stringify(updated));
-  };
+  const handleDeleteSaved = useCallback((id) => {
+    setSavedDesigns(prev => {
+      const updated = prev.filter(p => p.id !== id);
+      localStorage.setItem("qr_saved_designs", JSON.stringify(updated));
+      return updated;
+    });
+    setTimeout(() => {
+      updateAnalytics();
+    }, 50);
+    showToast("Deleted saved design");
+  }, [updateAnalytics, showToast]);
+
+  const handleApplySaved = useCallback((item) => {
+    setQrState({
+      qrType: item.qrType,
+      rawData: item.rawData || "",
+      dotType: item.dotType,
+      cornerSquareType: item.cornerSquareType,
+      cornerDotType: item.cornerDotType,
+      colorType: item.colorType || "single",
+      dotColor: item.dotColor,
+      gradientType: item.gradientType || "linear",
+      gradientColor: item.gradientColor || "#D7C4B1",
+      gradientRotation: item.gradientRotation || 0,
+      bgColor: item.bgColor === "transparent" ? "#FFFFFF" : item.bgColor,
+      transparentBg: item.transparentBg || item.bgColor === "transparent",
+      margin: item.margin || 10,
+      logo: item.logo || "",
+      logoSize: item.logoSize || 0.3,
+      logoMargin: item.logoMargin || 5
+    });
+
+    if (item.qrType === "wifi") {
+      setWifiSsid(item.wifiSsid || "");
+      setWifiPassword(item.wifiPassword || "");
+      setWifiEncryption(item.wifiEncryption || "WPA");
+    }
+    showToast(`Loaded saved design "${item.name}"`);
+  }, [showToast]);
+
+  // Scannability test checker
+  const handleTestQR = useCallback(() => {
+    try {
+      const canvas = qrRef.current.querySelector("canvas");
+      if (!canvas) {
+        setValidationResult("failed");
+        showToast("QR Code Canvas not rendered yet", "error");
+        return;
+      }
+      
+      const ctx = canvas.getContext("2d");
+      const width = canvas.width;
+      const height = canvas.height;
+      const imageData = ctx.getImageData(0, 0, width, height);
+      
+      const code = jsQR(imageData.data, width, height);
+      if (code && code.data) {
+        setValidationResult("success");
+        showToast("Validation Passed! QR is fully scannable.");
+      } else {
+        setValidationResult("failed");
+        showToast("Validation Failed. QR might not be scannable.", "error");
+      }
+    } catch (err) {
+      console.error("Test QR error:", err);
+      setValidationResult("failed");
+      showToast("Error checking scannability.", "error");
+    }
+  }, [showToast]);
 
   // Logo Upload handlers
-  const handleLogoUpload = (e) => {
+  const handleLogoUpload = useCallback((e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = () => {
       setQrState(prev => ({ ...prev, logo: reader.result }));
+      showToast("Logo uploaded successfully");
     };
     reader.readAsDataURL(file);
-  };
+  }, [showToast]);
 
-  const handleRemoveLogo = () => {
+  const handleRemoveLogo = useCallback(() => {
     setQrState(prev => ({ ...prev, logo: "" }));
-  };
+    showToast("Logo removed");
+  }, [showToast]);
 
   // Export handlers
-  const handleDownload = async (format) => {
+  const handleDownload = useCallback(async (format) => {
     if (!generatedValue) return;
     
     saveToHistory();
@@ -296,7 +475,7 @@ export default function QRGenerator() {
       width: selectedResolution,
       height: selectedResolution,
       data: generatedValue,
-      margin: qrState.margin * (selectedResolution / 300), // scale margin proportionally
+      margin: qrState.margin * (selectedResolution / 300),
       image: qrState.logo,
       qrOptions: {
         errorCorrectionLevel: "H",
@@ -334,18 +513,20 @@ export default function QRGenerator() {
     });
 
     await exportQr.download({
-      name: `qr-studio-${selectedResolution}px`,
+      name: `elite-qr-${selectedResolution}px`,
       extension: format
     });
-  };
+    showToast(`Downloaded ${format.toUpperCase()} successfully!`);
+  }, [generatedValue, selectedResolution, qrState, saveToHistory, showToast]);
 
-  const handleDownloadAll = async () => {
+  const handleDownloadAll = useCallback(async () => {
     await handleDownload("png");
     setTimeout(() => handleDownload("jpeg"), 350);
     setTimeout(() => handleDownload("svg"), 700);
-  };
+    showToast("Triggered download for all 3 formats!");
+  }, [handleDownload, showToast]);
 
-  const handleCopyImage = async () => {
+  const handleCopyImage = useCallback(async () => {
     try {
       const canvas = qrRef.current.querySelector("canvas");
       if (!canvas) return;
@@ -357,25 +538,26 @@ export default function QRGenerator() {
         await navigator.clipboard.write([
           new ClipboardItem({ "image/png": blob })
         ]);
-        alert("Success! QR Code image copied to your clipboard.");
+        showToast("Success! QR Code image copied to clipboard.");
       }, "image/png");
     } catch (err) {
       console.warn("Clipboard writing error:", err);
-      alert("Clipboard image copy failed. Please download the QR directly.");
+      showToast("Clipboard copy failed. Please download the QR directly.", "error");
     }
-  };
+  }, [saveToHistory, showToast]);
 
-  const handleCopyLink = () => {
+  const handleCopyLink = useCallback(() => {
     try {
       navigator.clipboard.writeText(generatedValue);
       saveToHistory();
-      alert("Copied! QR data copied to clipboard.");
+      showToast("Copied encoded content to clipboard!");
     } catch (err) {
       console.error(err);
+      showToast("Copy failed", "error");
     }
-  };
+  }, [generatedValue, saveToHistory, showToast]);
 
-  const handleShare = async () => {
+  const handleShare = useCallback(async () => {
     try {
       const canvas = qrRef.current.querySelector("canvas");
       if (!canvas) return;
@@ -392,20 +574,43 @@ export default function QRGenerator() {
             title: "Elite QR Code",
             text: "Check out this custom QR design made in Elite QR Generator."
           });
+          showToast("Shared successfully!");
         } else {
           // Fallback
           navigator.clipboard.writeText(generatedValue);
-          alert("Web sharing is not supported by your browser. QR data copied to clipboard!");
+          showToast("Sharing not supported. Content copied to clipboard instead!");
         }
       });
     } catch (err) {
       console.warn(err);
+      showToast("Sharing aborted or failed", "error");
     }
-  };
+  }, [generatedValue, saveToHistory, showToast]);
 
   return (
     <section id="generator" className="generator-section">
       <div className="container">
+        
+        {/* Local Analytics Dashboard Row */}
+        <div className="analytics-dashboard">
+          <div className="analytics-card">
+            <div className="analytics-value">{analytics.total}</div>
+            <div className="analytics-label">Total Generated</div>
+          </div>
+          <div className="analytics-card">
+            <div className="analytics-value">{analytics.today}</div>
+            <div className="analytics-label">Today</div>
+          </div>
+          <div className="analytics-card">
+            <div className="analytics-value">{analytics.thisWeek}</div>
+            <div className="analytics-label">This Week</div>
+          </div>
+          <div className="analytics-card">
+            <div className="analytics-value">{analytics.savedCount}</div>
+            <div className="analytics-label">Saved Designs</div>
+          </div>
+        </div>
+
         <div className="section-title">
           <h2>Design & Generate</h2>
           <p>Tweak content, shape dots, embed a logo, and export in print resolutions.</p>
@@ -547,6 +752,31 @@ export default function QRGenerator() {
             {activeTab === "style" && (
               <div>
                 <h3 className="panel-title"><FiSliders /> QR Code Aesthetics</h3>
+
+                {/* Phase 5: One-click Design Templates */}
+                <div className="input-group">
+                  <label className="input-label">✨ One-Click Theme Templates</label>
+                  <div className="templates-grid">
+                    {QR_TEMPLATES.map(template => (
+                      <div
+                        key={template.id}
+                        className={`template-btn ${qrState.dotType === template.dotType && qrState.dotColor === template.dotColor ? "active" : ""}`}
+                        onClick={() => handleApplyTemplate(template)}
+                      >
+                        <div
+                          className="template-btn-preview"
+                          style={{
+                            background: template.colorType === "gradient" 
+                              ? `linear-gradient(${template.gradientRotation || 0}deg, ${template.dotColor}, ${template.gradientColor})`
+                              : template.dotColor,
+                            borderColor: template.bgColor === "#FFFFFF" ? "rgba(0,0,0,0.1)" : template.bgColor
+                          }}
+                        />
+                        <span className="template-btn-title">{template.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
                 {/* Dot Shape Selector */}
                 <div className="input-group">
@@ -824,33 +1054,113 @@ export default function QRGenerator() {
             {/* TAB CONTENT: Presets & History */}
             {activeTab === "presets" && (
               <div>
-                <h3 className="panel-title"><FiBookmark /> Templates & Library</h3>
+                <h3 className="panel-title"><FiBookmark /> Presets & Saved Designs</h3>
 
-                {/* Default presets quick apply */}
-                <div className="input-group">
-                  <label className="input-label">Luxury Theme Presets</label>
-                  <div className="preset-row">
-                    {DEFAULT_PRESETS.map(preset => (
-                      <button
-                        key={preset.id}
-                        className="preset-chip"
-                        onClick={() => handleApplyPreset(preset)}
-                      >
-                        {preset.name}
-                      </button>
-                    ))}
-                  </div>
+                {/* Phase 6: Save Current Design Preset */}
+                <div style={{ marginBottom: "25px" }}>
+                  <label className="input-label">⭐ Save Current Design Template</label>
+                  <form 
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const name = e.target.elements.designName.value.trim();
+                      if (!name) return;
+                      handleSaveDesign(name);
+                      e.target.reset();
+                    }}
+                    style={{ display: "flex", gap: "10px", marginTop: "8px" }}
+                  >
+                    <input
+                      type="text"
+                      name="designName"
+                      className="input-field"
+                      placeholder="e.g. My Style v1"
+                      style={{ padding: "8px 12px", fontSize: "0.85rem", flex: 1 }}
+                    />
+                    <button
+                      type="submit"
+                      className="action-btn btn-primary"
+                      style={{
+                        padding: "8px 14px",
+                        fontSize: "0.85rem",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px",
+                        borderRadius: "var(--radius-sm)"
+                      }}
+                    >
+                      Save
+                    </button>
+                  </form>
                 </div>
 
-                <div style={{ borderBottom: "1px solid var(--border-color)", margin: "20px 0" }} />
+                {/* Saved Designs preseters */}
+                {savedDesigns.length > 0 && (
+                  <div style={{ marginBottom: "25px" }}>
+                    <label className="input-label">⭐ Your Saved Designs</label>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "8px" }}>
+                      {savedDesigns.map((design) => (
+                        <div
+                          key={design.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "10px 12px",
+                            borderRadius: "var(--radius-sm)",
+                            background: "rgba(0, 0, 0, 0.02)",
+                            border: "1px solid var(--border-color)"
+                          }}
+                        >
+                          <button
+                            onClick={() => handleApplySaved(design)}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              fontFamily: "inherit",
+                              fontSize: "0.85rem",
+                              fontWeight: 600,
+                              color: "var(--text-primary)",
+                              cursor: "pointer",
+                              textAlign: "left",
+                              flex: 1,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px"
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: "inline-block",
+                                width: "10px",
+                                height: "10px",
+                                borderRadius: "50%",
+                                background: design.dotColor || "var(--primary)"
+                              }}
+                            />
+                            {design.name}
+                            <span style={{ fontSize: "0.7rem", opacity: 0.5, fontWeight: 500 }}>
+                              ({new Date(design.timestamp).toLocaleDateString()})
+                            </span>
+                          </button>
 
-                {/* FavoritesPreserter */}
-                <QRFavorites
-                  favorites={favoritePresets}
-                  onApply={handleApplyPreset}
-                  onSaveCurrent={handleSaveFavorite}
-                  onDelete={handleDeleteFavorite}
-                />
+                          <button
+                            onClick={() => handleDeleteSaved(design.id)}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color: "var(--accent)",
+                              cursor: "pointer",
+                              padding: "4px"
+                            }}
+                            title="Delete Saved Preset"
+                          >
+                            <FiTrash2 size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div style={{ borderBottom: "1px solid var(--border-color)", margin: "20px 0" }} />
 
@@ -884,11 +1194,49 @@ export default function QRGenerator() {
               </h3>
 
               <div className="preview-container">
-                {/* QR Canvas Container */}
-                <div
-                  className={`qr-canvas-wrapper ${qrState.transparentBg ? "transparent-bg" : ""}`}
-                  ref={qrRef}
-                />
+                {/* QR Canvas Container with loader state */}
+                <div style={{ position: "relative" }}>
+                  <div
+                    className={`qr-canvas-wrapper ${qrState.transparentBg ? "transparent-bg" : ""}`}
+                    ref={qrRef}
+                    style={{ opacity: isLoading ? 0.3 : 1 }}
+                  />
+                  
+                  {isLoading && (
+                    <div 
+                      className="skeleton-box" 
+                      style={{ 
+                        position: "absolute", 
+                        top: 0, 
+                        left: 0, 
+                        width: "100%", 
+                        height: "100%",
+                        opacity: 0.4
+                      }} 
+                    />
+                  )}
+                </div>
+
+                {/* Phase 7: Scannability Test Buttons */}
+                <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", marginTop: "15px" }}>
+                  <Button variant="outline" onClick={handleTestQR} style={{ width: "100%", fontSize: "0.85rem", padding: "8px 16px" }}>
+                    🔍 Test QR Validity
+                  </Button>
+                  
+                  {validationResult === "success" && (
+                    <div className="validation-banner validation-success">
+                      <FiCheckCircle size={16} />
+                      <span>✅ QR is scannable</span>
+                    </div>
+                  )}
+
+                  {validationResult === "failed" && (
+                    <div className="validation-banner validation-failed">
+                      <FiXCircle size={16} />
+                      <span>❌ QR validation failed</span>
+                    </div>
+                  )}
+                </div>
 
                 {/* Size options */}
                 <div className="input-group" style={{ width: "100%", marginTop: "24px" }}>
@@ -927,14 +1275,14 @@ export default function QRGenerator() {
 
                 {/* Share Features Row */}
                 <div className="share-options-row">
-                  <button className="share-icon-btn" onClick={handleCopyImage} title="Copy QR Image to Clipboard">
+                  <button className="share-icon-btn" onClick={handleCopyImage} title="📋 Copy QR Image to Clipboard">
                     <FiCopy />
-                    <span>Copy Image</span>
+                    <span>📋 Copy QR</span>
                   </button>
 
-                  <button className="share-icon-btn" onClick={handleShare} title="Share QR via System Application">
+                  <button className="share-icon-btn" onClick={handleShare} title="📤 Share QR via System Application">
                     <FiShare2 />
-                    <span>Share QR</span>
+                    <span>📤 Share QR</span>
                   </button>
 
                   <button className="share-icon-btn" onClick={handleCopyLink} title="Copy encoded string link">
@@ -966,6 +1314,26 @@ export default function QRGenerator() {
           </div>
         </div>
       </div>
+
+      {/* Frame Motion Toast Notifications renderer */}
+      <div className="toast-container">
+        <AnimatePresence>
+          {toasts.map(t => (
+            <motion.div
+              key={t.id}
+              initial={{ opacity: 0, y: 30, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 350, damping: 25 }}
+              className={`toast ${t.type === "error" ? "toast-error" : ""}`}
+            >
+              {t.type === "error" ? <FiXCircle style={{ color: "var(--accent)" }} /> : <FiCheckCircle style={{ color: "var(--primary)" }} />}
+              <span>{t.message}</span>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
     </section>
   );
 }

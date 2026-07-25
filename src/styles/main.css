@@ -1081,3 +1081,211 @@ body.dark .footer {
   border: none;
   cursor: pointer;
 }
+
+/* Toast Notifications */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  width: min(350px, 90vw);
+}
+
+.toast {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-hover);
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 0.88rem;
+  pointer-events: auto;
+  border-left: 5px solid var(--primary);
+}
+
+.toast-error {
+  border-left-color: var(--accent);
+}
+
+/* Dashboard Analytics Widget */
+.analytics-dashboard {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 25px;
+  width: 100%;
+}
+
+@media (min-width: 480px) {
+  .analytics-dashboard {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.analytics-card {
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  transition: var(--transition);
+}
+
+body.dark .analytics-card {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.analytics-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+}
+
+.analytics-value {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--primary);
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+
+.analytics-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Scannability Test Validation Banner */
+.validation-banner {
+  margin-top: 15px;
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  text-align: center;
+  font-size: 0.88rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+}
+
+.validation-success {
+  background: rgba(46, 204, 113, 0.1);
+  color: #27ae60;
+  border: 1px solid rgba(46, 204, 113, 0.2);
+}
+
+.validation-failed {
+  background: rgba(231, 76, 60, 0.1);
+  color: #c0392b;
+  border: 1px solid rgba(231, 76, 60, 0.2);
+}
+
+/* Style Templates row */
+.templates-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 480px) {
+  .templates-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.template-btn {
+  background: rgba(0, 0, 0, 0.01);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 10px 6px;
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+body.dark .template-btn {
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.template-btn:hover {
+  border-color: var(--primary);
+  background: rgba(99, 13, 22, 0.03);
+}
+
+.template-btn.active {
+  border-color: var(--primary);
+  background: rgba(99, 13, 22, 0.06);
+  box-shadow: 0 4px 10px rgba(99, 13, 22, 0.1);
+}
+
+.template-btn-preview {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.template-btn-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Skeletons */
+.skeleton-box {
+  background: linear-gradient(90deg, rgba(0,0,0,0.06) 25%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.06) 75%);
+  background-size: 200% 100%;
+  animation: loading-skeleton 1.5s infinite;
+  border-radius: 8px;
+}
+
+body.dark .skeleton-box {
+  background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.05) 75%);
+  background-size: 200% 100%;
+}
+
+@keyframes loading-skeleton {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* General responsive overflow fixes */
+.generator-panel, .preview-panel, .projects-grid, .footer {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+img, svg, canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+.telegram-notice-banner {
+  word-break: break-word;
+  line-height: 1.4;
+}
+

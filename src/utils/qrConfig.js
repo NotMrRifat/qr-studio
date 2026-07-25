@@ -97,3 +97,79 @@ export const DEFAULT_QR_STATE = {
   logoSize: 0.3,
   logoMargin: 5
 };
+
+export const QR_TEMPLATES = [
+  {
+    id: "minimal",
+    name: "Minimal",
+    dotColor: "#000000",
+    bgColor: "#FFFFFF",
+    dotType: "square",
+    cornerSquareType: "square",
+    cornerDotType: "square",
+    colorType: "single",
+    transparentBg: false
+  },
+  {
+    id: "luxury",
+    name: "Luxury",
+    dotColor: "#630D16",
+    bgColor: "#D7C4B1",
+    dotType: "classy",
+    cornerSquareType: "extra-rounded",
+    cornerDotType: "dot",
+    colorType: "single",
+    transparentBg: false
+  },
+  {
+    id: "dark",
+    name: "Dark",
+    dotColor: "#D7C4B1",
+    bgColor: "#1A0D0F",
+    dotType: "rounded",
+    cornerSquareType: "extra-rounded",
+    cornerDotType: "dot",
+    colorType: "single",
+    transparentBg: false
+  },
+  {
+    id: "neon",
+    name: "Neon",
+    dotColor: "#00F2FE",
+    bgColor: "#000000",
+    dotType: "extra-rounded",
+    cornerSquareType: "extra-rounded",
+    cornerDotType: "dot",
+    colorType: "gradient",
+    gradientType: "linear",
+    gradientColor: "#4FACFE",
+    gradientRotation: 45,
+    transparentBg: false
+  },
+  {
+    id: "stymetics",
+    name: "StyMetics",
+    dotColor: "#630D16",
+    bgColor: "#EDE4DA",
+    dotType: "classy-rounded",
+    cornerSquareType: "extra-rounded",
+    cornerDotType: "dot",
+    colorType: "gradient",
+    gradientType: "linear",
+    gradientColor: "#8B1E2D",
+    gradientRotation: 135,
+    transparentBg: false
+  },
+  {
+    id: "business",
+    name: "Business",
+    dotColor: "#0A192F",
+    bgColor: "#FFFFFF",
+    dotType: "square",
+    cornerSquareType: "square",
+    cornerDotType: "square",
+    colorType: "single",
+    transparentBg: false
+  }
+];
+

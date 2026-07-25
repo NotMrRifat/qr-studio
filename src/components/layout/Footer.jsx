@@ -5,6 +5,14 @@ export default function Footer() {
   return (
     <footer className="footer" id="about">
       <div className="container footer-content">
+        <div style={{ marginBottom: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+          <img
+            src="/Logo.png"
+            alt="Elite QR Logo"
+            style={{ width: "48px", height: "48px", objectFit: "contain", borderRadius: "8px" }}
+          />
+          <span style={{ fontFamily: "Outfit, sans-serif", fontWeight: 800, fontSize: "1.2rem", color: "var(--primary)" }}>Elite QR Generator</span>
+        </div>
         <p className="footer-text">Crafted with ❤️ by</p>
 
         <motion.a

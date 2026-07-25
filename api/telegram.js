@@ -1,6 +1,6 @@
 import QRCode from "qrcode";
 import { userStore } from "../lib/userStore.js";
-import { sendMessage, sendPhoto, answerCallbackQuery } from "../lib/telegram.js";
+import { sendMessage, sendPhoto, answerCallbackQuery, editMessageText } from "../lib/telegram.js";
 import { generateQRValue } from "../lib/qrGenerator.js";
 
 // Configured values
@@ -113,11 +113,49 @@ export default async function handler(req, res) {
         console.log(`Routing command: ${command} from user ${userId}`);
 
         switch (command) {
-          case "/start":
-            await sendStartMenu(chatId, username);
+          case "/start": {
+            const payload = text.split(" ")[1] ? text.split(" ")[1].toLowerCase().trim() : null;
+            if (payload === "wifi") {
+              await userStore.setUserState(userId, { step: "wifi_ssid" });
+              await sendMessage(chatId, "📶 <b>WiFi QR Flow:</b>\n\nSend the WiFi <b>Network SSID (Name)</b>:");
+            } else if (["url", "text", "email", "phone", "whatsapp"].includes(payload)) {
+              await userStore.setUserState(userId, { step: `waiting_for_${payload}` });
+              const prompts = {
+                url: "🔗 Send the <b>URL</b> (e.g. <i>google.com</i>):",
+                text: "📝 Send the <b>text message</b> you want to encode:",
+                phone: "📞 Send the <b>Phone Number</b>:",
+                email: "📧 Send the <b>Email Address</b>:",
+                whatsapp: "💬 Send the phone number for the <b>WhatsApp Chat</b>:\n<i>(Bangladesh numbers are formatted automatically to wa.me/880...)</i>"
+              };
+              await sendMessage(chatId, prompts[payload] || "Please send the details:");
+            } else {
+              await sendStartMenu(chatId, username);
+            }
             break;
+          }
           case "/menu":
+          case "/qr":
             await sendMenuCommand(chatId);
+            break;
+          case "/url":
+            await userStore.setUserState(userId, { step: "waiting_for_url" });
+            await sendMessage(chatId, "🔗 Send the <b>URL</b> (e.g. <i>google.com</i>):");
+            break;
+          case "/text":
+            await userStore.setUserState(userId, { step: "waiting_for_text" });
+            await sendMessage(chatId, "📝 Send the <b>text message</b> you want to encode:");
+            break;
+          case "/phone":
+            await userStore.setUserState(userId, { step: "waiting_for_phone" });
+            await sendMessage(chatId, "📞 Send the <b>Phone Number</b>:");
+            break;
+          case "/email":
+            await userStore.setUserState(userId, { step: "waiting_for_email" });
+            await sendMessage(chatId, "📧 Send the <b>Email Address</b>:");
+            break;
+          case "/wifi":
+            await userStore.setUserState(userId, { step: "wifi_ssid" });
+            await sendMessage(chatId, "📶 <b>WiFi QR Flow:</b>\n\nSend the WiFi <b>Network SSID (Name)</b>:");
             break;
           case "/help":
             await sendHelpMessage(chatId);
@@ -463,11 +501,16 @@ async function handleAdminCommand(chatId, userId) {
 
 async function executeBroadcast(chatId, broadcastText) {
   const users = await userStore.getAllUsers();
+  const totalUsers = users.length;
 
   let successCount = 0;
   let failedCount = 0;
 
-  for (const user of users) {
+  const progressMsg = await sendMessage(chatId, `📤 Sending...\n\n0 / ${totalUsers}`);
+  const messageId = progressMsg && progressMsg.ok && progressMsg.result ? progressMsg.result.message_id : null;
+
+  for (let i = 0; i < totalUsers; i++) {
+    const user = users[i];
     try {
       const res = await sendMessage(user.telegram_user_id, broadcastText);
       if (res && res.ok) {
@@ -478,13 +521,20 @@ async function executeBroadcast(chatId, broadcastText) {
     } catch {
       failedCount++;
     }
+
+    const currentSent = i + 1;
+    if (messageId && (currentSent % 5 === 0 || currentSent === totalUsers)) {
+      await editMessageText(chatId, messageId, `📤 Sending...\n\n${currentSent} / ${totalUsers}`);
+    }
   }
 
-  await sendMessage(chatId, `✅ <b>Broadcast Complete</b>
-
-📤 Success: ${successCount}
-
-❌ Failed: ${failedCount}`);
+  const finalReport = `✅ <b>Broadcast Complete</b>\n\n📤 Success: ${successCount}\n\n❌ Failed: ${failedCount}`;
+  
+  if (messageId) {
+    await editMessageText(chatId, messageId, finalReport);
+  } else {
+    await sendMessage(chatId, finalReport);
+  }
 }
 
 // QR CODE RENDERER
