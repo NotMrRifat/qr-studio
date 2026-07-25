@@ -2,7 +2,7 @@ const CACHE_NAME = "elite-qr-v1";
 const ASSETS = [
   "/",
   "/index.html",
-  "/Logo.png",
+  "/logo.png",
   "/manifest.json",
   "/src/main.jsx",
   "/src/App.jsx",

@@ -58,7 +58,7 @@ export default function Header() {
         <div className="container nav">
           <a href="#" className="logo-container">
             <img
-              src="/Logo.png"
+              src="/logo.png"
               alt="Elite QR Logo"
               className="logo-icon"
               style={{ width: "32px", height: "32px", objectFit: "contain", borderRadius: "6px" }}

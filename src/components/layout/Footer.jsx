@@ -7,7 +7,7 @@ export default function Footer() {
       <div className="container footer-content">
         <div style={{ marginBottom: "20px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
           <img
-            src="/Logo.png"
+            src="/logo.png"
             alt="Elite QR Logo"
             style={{ width: "48px", height: "48px", objectFit: "contain", borderRadius: "8px" }}
           />
